@@ -1,18 +1,116 @@
+# Environment & Credentials (NEVER COMMIT)
 .env
 .env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+*.cert
+*.crt
+*.pfx
+*.p12
+
+# Explicit exception for example templates
 !.env.example
 !.env.frontend.example
+!backend/.env.example
+!frontend/.env.example
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
 *.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
 .venv/
+venv/
+ENV/
+env/
+env.bak/
+venv.bak/
+
+# Node & Frontend
+node_modules/
+.npm
+.pnpm-store
+dist/
+dist-ssr/
+build/
+.vite/
+*.tsbuildinfo
+.eslintcache
+
+# Testing & Coverage
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
-node_modules/
-dist/
+.hypothesis/
 coverage/
-.DS_Store
+*.coverage
+*.coverage.*
+.coverage
+htmlcov/
+nosetests.xml
+coverage.xml
+*.lcov
+
+# Databases & Local State
+*.db
+*.sqlite
+*.sqlite3
 sylvar_dev.db
+test_probe.db
+
+# Archives & Temporary Deliveries
 *.zip
-sample_brand_guidelines.txt
+*.tar
+*.tar.gz
+*.rar
+*.7z
+release/
+sylvar_ui_delivery/
+
+# Logs & Debug
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+*.tmp
+
+# Visuals & Temporary Outputs
+screenshots/
+verification/
+
+# OS & Editor
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*~
