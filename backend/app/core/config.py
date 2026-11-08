@@ -61,7 +61,17 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origins_list(self) -> list[str]:
-        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        origins: list[str] = []
+        for o in self.allowed_origins.split(","):
+            cleaned = o.strip()
+            if not cleaned:
+                continue
+            normalized = cleaned.rstrip("/")
+            if normalized and normalized not in origins:
+                origins.append(normalized)
+            if cleaned not in origins:
+                origins.append(cleaned)
+        return origins
 
     def jwt_config(self) -> JWTConfig | None:
         return build_jwt_config(

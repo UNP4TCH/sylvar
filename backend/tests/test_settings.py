@@ -8,6 +8,13 @@ def test_allowed_origins_parsed_from_comma_separated() -> None:
     assert s.allowed_origins_list == ["http://a.test", "https://b.test"]
 
 
+def test_allowed_origins_normalizes_trailing_slashes() -> None:
+    s = clean_settings(allowed_origins="https://sylvar-green.vercel.app/, http://localhost:5173")
+    assert "https://sylvar-green.vercel.app" in s.allowed_origins_list
+    assert "https://sylvar-green.vercel.app/" in s.allowed_origins_list
+    assert "http://localhost:5173" in s.allowed_origins_list
+
+
 def test_wildcard_origin_rejected() -> None:
     try:
         clean_settings(allowed_origins="http://a.test,*")
