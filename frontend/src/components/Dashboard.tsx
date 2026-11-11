@@ -1,4 +1,7 @@
 import ApiStatus from "./ApiStatus";
+import AnalyticsView from "./AnalyticsView";
+import ContradictionsView from "./ContradictionsView";
+import VisualAuditPanel from "./VisualAuditPanel";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { getSupabase } from "../lib/supabase";
 import { createAuthedClient } from "../lib/authedApi";
@@ -57,6 +60,7 @@ interface AuditCheck {
   engine_type: string;
   status: string;
   execution_time_ms: number;
+  summary_details?: Record<string, unknown>;
 }
 
 interface AuditRun {
@@ -190,8 +194,15 @@ export default function Dashboard({
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("CONTENT_CREATOR");
 
-  // UI Navigation Pipeline Stage Filter ("ALL" | "MEMORY" | "AUDIT" | "GOVERNANCE")
-  const [activePipelineTab, setActivePipelineTab] = useState<"ALL" | "MEMORY" | "AUDIT" | "GOVERNANCE">("ALL");
+  // UI Navigation Pipeline Stage Filter ("ALL" | "MEMORY" | "AUDIT" | "GOVERNANCE" | "CONTRADICTIONS" | "ANALYTICS")
+  const [activePipelineTab, setActivePipelineTab] = useState<
+    "ALL" | "MEMORY" | "AUDIT" | "GOVERNANCE" | "CONTRADICTIONS" | "ANALYTICS"
+  >("ALL");
+
+  // Multimodal visual asset state (Stage 3.1 & 4)
+  const [assetType, setAssetType] = useState<"TEXT" | "IMAGE" | "HYBRID">("TEXT");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
 
   // Global notifications & loading state
   const [message, setMessage] = useState<string | null>(null);
@@ -685,20 +696,32 @@ export default function Dashboard({
     try {
       let aId = currentAssetId;
       let vId = currentVersionId;
-      if (!aId || contentText !== lastAuditedText) {
-        const assetRes = await api.post<{
-          asset_id: string;
-          latest_version: { version_id: string; version_number: number };
-        }>(`/api/v1/workspaces/${selectedWs}/clients/${selectedClient}/assets`, {
-          title: contentTitle,
-          content_type: "TEXT",
-          text_content: contentText,
-        });
-        aId = assetRes.asset_id;
-        vId = assetRes.latest_version.version_id;
+      if (!aId || contentText !== lastAuditedText || assetType !== "TEXT") {
+        if (assetType === "IMAGE" && imageFile) {
+          const form = new FormData();
+          form.append("file", imageFile);
+          form.append("title", contentTitle || "Visual Brand Asset");
+          const assetRes = await api.post<{
+            asset_id: string;
+            latest_version: { version_id: string; version_number: number };
+          }>(`/api/v1/workspaces/${selectedWs}/clients/${selectedClient}/assets/upload`, form);
+          aId = assetRes.asset_id;
+          vId = assetRes.latest_version.version_id;
+        } else {
+          const assetRes = await api.post<{
+            asset_id: string;
+            latest_version: { version_id: string; version_number: number };
+          }>(`/api/v1/workspaces/${selectedWs}/clients/${selectedClient}/assets`, {
+            title: contentTitle || "Marketing Collateral",
+            content_type: assetType,
+            text_content: contentText || "Draft Content",
+          });
+          aId = assetRes.asset_id;
+          vId = assetRes.latest_version.version_id;
+        }
         setCurrentAssetId(aId);
         setCurrentVersionId(vId);
-        setCurrentVersionNumber(assetRes.latest_version.version_number);
+        setCurrentVersionNumber(1);
         setLastAuditedText(contentText);
       }
 
@@ -874,8 +897,10 @@ export default function Dashboard({
   const pageMeta = {
     ALL: { eyebrow: "WORKSPACE OVERVIEW", title: "Good to see you.", description: "Your brand governance workspace at a glance." },
     MEMORY: { eyebrow: "STAGE 01 · LIVING BRAND MEMORY", title: "Brand memory", description: "Manage approved guidelines, extracted rules and active brand knowledge." },
-    AUDIT: { eyebrow: "STAGE 02 · CONTENT GOVERNANCE", title: "Governance studio", description: "Create content, run pre-publication audits and resolve findings." },
-    GOVERNANCE: { eyebrow: "STAGE 03 · INDEPENDENT REVIEW", title: "Review queue", description: "Review submissions, record decisions and issue compliance certificates." },
+    CONTRADICTIONS: { eyebrow: "STAGE 03 · GUIDELINE CONTRADICTIONS", title: "Contradiction scanner", description: "Detect cross-rule terminology conflicts, color clashes, and factual claim discrepancies with human resolution." },
+    AUDIT: { eyebrow: "STAGE 02 · CONTENT GOVERNANCE", title: "Governance studio", description: "Create content, run multimodal visual & text audits and resolve findings." },
+    GOVERNANCE: { eyebrow: "STAGE 04 · INDEPENDENT REVIEW", title: "Review queue", description: "Review submissions, record decisions and issue compliance certificates." },
+    ANALYTICS: { eyebrow: "STAGE 05 · LONGITUDINAL INSIGHTS", title: "Compliance analytics", description: "Track recurring violation patterns, pre-flight pass/block rates, and strategic recommendations." },
   }[activePipelineTab];
 
   return (
@@ -891,8 +916,10 @@ export default function Dashboard({
         <nav className="sylvar-side-nav" aria-label="Main navigation">
           <button type="button" className={activePipelineTab === "ALL" ? "active" : ""} onClick={() => setActivePipelineTab("ALL")}><span className="nav-icon">⌂</span>Overview</button>
           <button type="button" className={activePipelineTab === "MEMORY" ? "active" : ""} onClick={() => setActivePipelineTab("MEMORY")}><span className="nav-icon">◈</span>Living memory{candidateSummary.pending > 0 && <i>{candidateSummary.pending}</i>}</button>
+          <button type="button" className={activePipelineTab === "CONTRADICTIONS" ? "active" : ""} onClick={() => setActivePipelineTab("CONTRADICTIONS")}><span className="nav-icon">⚡</span>Contradictions</button>
           <button type="button" className={activePipelineTab === "AUDIT" ? "active" : ""} onClick={() => setActivePipelineTab("AUDIT")}><span className="nav-icon">✳</span>Governance studio</button>
           <button type="button" className={activePipelineTab === "GOVERNANCE" ? "active" : ""} onClick={() => setActivePipelineTab("GOVERNANCE")}><span className="nav-icon">▤</span>Review queue{reviews.length > 0 && <i>{reviews.length}</i>}</button>
+          <button type="button" className={activePipelineTab === "ANALYTICS" ? "active" : ""} onClick={() => setActivePipelineTab("ANALYTICS")}><span className="nav-icon">📊</span>Analytics</button>
         </nav>
         <div className="sylvar-sidebar-bottom">
           <div className="sylvar-sidebar-status"><span className="sylvar-live-dot"/> API CONNECTED</div>
@@ -1429,6 +1456,18 @@ export default function Dashboard({
         </section>
       )}
 
+      {/* STAGE 3: GUIDELINE CONTRADICTION SCANNER & HUMAN RESOLUTION */}
+      {activePipelineTab === "CONTRADICTIONS" && (
+        <section aria-label="Guideline Contradictions">
+          <ContradictionsView
+            api={api}
+            workspaceId={selectedWs}
+            clientId={selectedClient}
+            isBrandManager={isBrandManager}
+          />
+        </section>
+      )}
+
       {/* STAGE 2: CONTENT GOVERNANCE STUDIO & MULTI-TIER AUDIT */}
       {activePipelineTab === "AUDIT" && (
         <section className="bg-[#131215] rounded-lg border border-[#232027] p-5 space-y-5">
@@ -1461,35 +1500,66 @@ export default function Dashboard({
             </div>
           )}
 
-          {/* Content Format / Channel Selector Pills */}
+          {/* Asset Type Selector: Text / Image / Hybrid */}
           <div className="space-y-1.5">
             <span className="block text-xs font-medium text-[#9a928c]">
-              Content Format / Channel Template
+              Asset Modality (Stage 3.1 Differentiator)
             </span>
             <div className="flex items-center gap-2 flex-wrap">
               {(
                 [
-                  { key: "SOCIAL_MEDIA", label: "Social Media" },
-                  { key: "ADVERTISEMENT", label: "Advertisement" },
-                  { key: "BLOG", label: "Blog Post" },
-                  { key: "EMAIL", label: "Email Newsletter" },
+                  { key: "TEXT", label: "Text Copy" },
+                  { key: "IMAGE", label: "Pure Image (PNG / JPEG / WEBP)" },
+                  { key: "HYBRID", label: "Hybrid (Copy + Visual Banner)" },
                 ] as const
-              ).map((fmt) => (
+              ).map((m) => (
                 <button
-                  key={fmt.key}
+                  key={m.key}
                   type="button"
-                  onClick={() => handleFormatChange(fmt.key)}
+                  onClick={() => setAssetType(m.key)}
                   className={`text-xs font-medium px-3 py-1.5 rounded-md border transition-all cursor-pointer ${
-                    contentFormat === fmt.key
-                      ? "bg-[#272118] text-[#f59e0b] border-[#553f1c]"
+                    assetType === m.key
+                      ? "bg-[#272118] text-[#f59e0b] border-[#553f1c] font-semibold"
                       : "bg-[#161518] text-[#8e847c] border-[#2b2733] hover:text-[#eee8e2] hover:bg-[#1f1d24]"
                   }`}
                 >
-                  {fmt.label}
+                  {m.label}
                 </button>
               ))}
             </div>
           </div>
+
+          {/* Content Format / Channel Selector Pills (For Text/Hybrid) */}
+          {assetType !== "IMAGE" && (
+            <div className="space-y-1.5">
+              <span className="block text-xs font-medium text-[#9a928c]">
+                Content Format / Channel Template
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {(
+                  [
+                    { key: "SOCIAL_MEDIA", label: "Social Media" },
+                    { key: "ADVERTISEMENT", label: "Advertisement" },
+                    { key: "BLOG", label: "Blog Post" },
+                    { key: "EMAIL", label: "Email Newsletter" },
+                  ] as const
+                ).map((fmt) => (
+                  <button
+                    key={fmt.key}
+                    type="button"
+                    onClick={() => handleFormatChange(fmt.key)}
+                    className={`text-xs font-medium px-3 py-1.5 rounded-md border transition-all cursor-pointer ${
+                      contentFormat === fmt.key
+                        ? "bg-[#272118] text-[#f59e0b] border-[#553f1c]"
+                        : "bg-[#161518] text-[#8e847c] border-[#2b2733] hover:text-[#eee8e2] hover:bg-[#1f1d24]"
+                    }`}
+                  >
+                    {fmt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Draft Inputs */}
           <div className="space-y-3">
@@ -1505,22 +1575,60 @@ export default function Dashboard({
                 placeholder="e.g. Spring Serum Launch Copy"
               />
             </div>
-            <div>
-              <div className="flex justify-between items-center mb-1.5">
+
+            {/* Visual Image Uploader (IMAGE / HYBRID) */}
+            {(assetType === "IMAGE" || assetType === "HYBRID") && (
+              <div className="space-y-2 p-3.5 rounded-md bg-[#161518] border border-[#2b2733]">
                 <label className="block text-xs font-medium text-[#9a928c]">
-                  Draft Content
+                  Upload Image Collateral (PNG, JPEG, WEBP &le; 10 MB, &le; 4096px)
                 </label>
-                <span className="text-xs text-[#8a7f77]">
-                  {contentText.length} characters | {contentText.split(/\s+/).filter(Boolean).length} words
-                </span>
+                <input
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      if (file.size > 10 * 1024 * 1024) {
+                        setMessage("File exceeds 10 MB limit.");
+                        return;
+                      }
+                      setImageFile(file);
+                      setImagePreviewUrl(URL.createObjectURL(file));
+                    }
+                  }}
+                  className="block w-full text-xs text-slate-400 file:mr-4 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-[#272118] file:text-[#f59e0b] hover:file:bg-[#342b1f] cursor-pointer"
+                />
+                {imagePreviewUrl && (
+                  <div className="mt-2 flex items-center gap-3 bg-[#111013] p-2 rounded border border-[#232027]">
+                    <img src={imagePreviewUrl} alt="Preview" className="h-16 w-16 object-cover rounded border border-[#332d3a]" />
+                    <div>
+                      <span className="text-xs text-slate-200 font-mono block">{imageFile?.name}</span>
+                      <span className="text-[10px] text-slate-500 font-mono">{(imageFile!.size / 1024).toFixed(1)} KB</span>
+                    </div>
+                  </div>
+                )}
               </div>
-              <textarea
-                rows={3}
-                value={contentText}
-                onChange={(e) => setContentText(e.target.value)}
-                className="w-full rounded-md border border-[#332d3a] p-3 text-xs text-[#f1eae4] bg-[#141316] focus:border-[#f59e0b] focus:outline-none transition-all font-sans"
-              />
-            </div>
+            )}
+
+            {/* Text Draft (TEXT / HYBRID) */}
+            {assetType !== "IMAGE" && (
+              <div>
+                <div className="flex justify-between items-center mb-1.5">
+                  <label className="block text-xs font-medium text-[#9a928c]">
+                    Draft Content
+                  </label>
+                  <span className="text-xs text-[#8a7f77]">
+                    {contentText.length} characters | {contentText.split(/\s+/).filter(Boolean).length} words
+                  </span>
+                </div>
+                <textarea
+                  rows={3}
+                  value={contentText}
+                  onChange={(e) => setContentText(e.target.value)}
+                  className="w-full rounded-md border border-[#332d3a] p-3 text-xs text-[#f1eae4] bg-[#141316] focus:border-[#f59e0b] focus:outline-none transition-all font-sans"
+                />
+              </div>
+            )}
           </div>
 
           {/* Action Row */}
@@ -1580,6 +1688,28 @@ export default function Dashboard({
                     </div>
                   ))}
                 </div>
+
+                {/* Stage 3.1 Differentiator: Visual Brand Compliance & WCAG Panel */}
+                {(() => {
+                  const visCheck = latestAudit.checks.find((c) => c.engine_type === "VISUAL");
+                  const visFindings = findings.filter(
+                    (f) =>
+                      f.rule_code?.startsWith("VISUAL") ||
+                      f.rule_code?.startsWith("RULE-LOGO") ||
+                      f.rule_code?.includes("COLOR") ||
+                      f.severity === "ADVISORY"
+                  );
+                  if (visCheck || assetType === "IMAGE" || assetType === "HYBRID") {
+                    return (
+                      <VisualAuditPanel
+                        visualCheck={visCheck}
+                        visualFindings={visFindings}
+                        imageUrl={imagePreviewUrl}
+                      />
+                    );
+                  }
+                  return null;
+                })()}
 
                 {/* Governance Findings & Intent-Preserving Diff View */}
                 {findings.length > 0 ? (
@@ -1863,6 +1993,17 @@ export default function Dashboard({
           ) : (
             <p className="text-xs text-[#8e847c] italic py-2">No approval requests in the review queue.</p>
           )}
+        </section>
+      )}
+
+      {/* STAGE 5: LONGITUDINAL COMPLIANCE INSIGHTS & ANALYTICS */}
+      {activePipelineTab === "ANALYTICS" && (
+        <section aria-label="Longitudinal Analytics">
+          <AnalyticsView
+            api={api}
+            workspaceId={selectedWs}
+            clientId={selectedClient}
+          />
         </section>
       )}
 

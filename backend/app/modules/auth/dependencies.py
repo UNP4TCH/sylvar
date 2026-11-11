@@ -7,7 +7,7 @@ import logging
 
 from fastapi import Depends, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import ProblemException
@@ -122,61 +122,66 @@ async def get_or_sync_user(db: AsyncSession, current_user: AuthenticatedUser) ->
             is_verified = await verify_identity_with_gotrue(current_user.user_id, current_user.email)
 
         if is_verified:
-            inv_stmt = (
-                select(WorkspaceInvitation)
-                .where(
-                    func.lower(WorkspaceInvitation.email) == current_user.email.lower(),
-                    WorkspaceInvitation.status == InvitationStatus.PENDING.value,
-                    WorkspaceInvitation.expires_at > datetime.now(UTC),
-                )
-                .with_for_update()
+            inv_stmt = select(WorkspaceInvitation).where(
+                func.lower(WorkspaceInvitation.email) == current_user.email.lower(),
+                WorkspaceInvitation.status == InvitationStatus.PENDING.value,
+                WorkspaceInvitation.expires_at > datetime.now(UTC),
             )
             pending_invitations = (await db.execute(inv_stmt)).scalars().all()
+            bind = db.bind
+            is_postgres = (bind.dialect.name == "postgresql") if bind else False
             for inv in pending_invitations:
                 if inv.status != InvitationStatus.PENDING.value:
                     continue
 
-                # Ensure referenced workspace exists
-                ws = await db.get(AgencyWorkspace, inv.workspace_id)
-                if not ws:
-                    continue
-
-                mem_stmt = select(WorkspaceMembership).where(
-                    WorkspaceMembership.workspace_id == inv.workspace_id,
-                    WorkspaceMembership.user_id == user.id,
-                )
-                existing_mem = (await db.execute(mem_stmt)).scalar_one_or_none()
-                if not existing_mem:
-                    new_mem = WorkspaceMembership(
-                        workspace_id=inv.workspace_id,
-                        user_id=user.id,
-                        role=inv.role,
-                        status=MembershipStatus.ACTIVE.value,
+                if is_postgres:
+                    # Authoritative atomic SECURITY DEFINER procedure (Migration 007)
+                    await db.execute(
+                        text("SELECT public.accept_workspace_invitation(:inv_id, :user_id)"),
+                        {"inv_id": inv.id, "user_id": user.id},
                     )
-                    db.add(new_mem)
                 else:
-                    # Guard 1: Deliberately revoked memberships CANNOT be silently reactivated
-                    if (
-                        existing_mem.status == MembershipStatus.REVOKED.value
-                        or existing_mem.revoked_at is not None
-                    ):
-                        logger.warning(
-                            "Deliberately revoked membership for user %s in workspace %s cannot be reactivated via standard invitation",
-                            user.id,
-                            inv.workspace_id,
-                        )
-                        inv.status = InvitationStatus.REVOKED.value
-                        inv.updated_at = datetime.now(UTC)
+                    # SQLite fallback for offline unit tests
+                    ws = await db.get(AgencyWorkspace, inv.workspace_id)
+                    if not ws:
                         continue
 
-                    # Guard 2 & 3: Never downgrade WORKSPACE_ADMIN and preserve existing role
-                    existing_mem.status = MembershipStatus.ACTIVE.value
-                    # Preserves existing role (especially WORKSPACE_ADMIN from accidental downgrade)
+                    mem_stmt = select(WorkspaceMembership).where(
+                        WorkspaceMembership.workspace_id == inv.workspace_id,
+                        WorkspaceMembership.user_id == user.id,
+                    )
+                    existing_mem = (await db.execute(mem_stmt)).scalar_one_or_none()
+                    if not existing_mem:
+                        new_mem = WorkspaceMembership(
+                            workspace_id=inv.workspace_id,
+                            user_id=user.id,
+                            role=inv.role,
+                            status=MembershipStatus.ACTIVE.value,
+                        )
+                        db.add(new_mem)
+                    else:
+                        # Guard 1: Deliberately revoked memberships CANNOT be silently reactivated
+                        if (
+                            existing_mem.status == MembershipStatus.REVOKED.value
+                            or existing_mem.revoked_at is not None
+                        ):
+                            logger.warning(
+                                "Deliberately revoked membership for user %s in workspace %s cannot be reactivated via standard invitation",
+                                user.id,
+                                inv.workspace_id,
+                            )
+                            inv.status = InvitationStatus.REVOKED.value
+                            inv.updated_at = datetime.now(UTC)
+                            continue
 
-                inv.status = InvitationStatus.ACCEPTED.value
-                inv.accepted_at = datetime.now(UTC)
-                inv.auth_user_id = user.id
-                inv.updated_at = datetime.now(UTC)
+                        # Guard 2 & 3: Never downgrade WORKSPACE_ADMIN and preserve existing role
+                        existing_mem.status = MembershipStatus.ACTIVE.value
+                        # Preserves existing role (especially WORKSPACE_ADMIN from accidental downgrade)
+
+                    inv.status = InvitationStatus.ACCEPTED.value
+                    inv.accepted_at = datetime.now(UTC)
+                    inv.auth_user_id = user.id
+                    inv.updated_at = datetime.now(UTC)
 
             if pending_invitations:
                 await db.flush()

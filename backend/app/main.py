@@ -12,9 +12,11 @@ from app.core.security.jwks import JWKSProvider
 from app.core.security.jwks_http import make_http_fetcher
 from app.core.security.jwt_verifier import JWTVerifier
 from app.db.session import validate_database_configuration
+from app.modules.analytics.router import router as analytics_router
 from app.modules.audits.router import router as audits_router
 from app.modules.auth.user_router import router as user_router
 from app.modules.clients.router import router as clients_router
+from app.modules.contradictions.router import router as contradictions_router
 from app.modules.documents.router import router as documents_router
 from app.modules.health.router import router as health_router
 from app.modules.memory.router import router as memory_router
@@ -94,6 +96,8 @@ def create_app(
     app.include_router(memory_router, prefix="/api/v1")
     app.include_router(audits_router, prefix="/api/v1")
     app.include_router(reviews_router, prefix="/api/v1")
+    app.include_router(contradictions_router, prefix="/api/v1")
+    app.include_router(analytics_router, prefix="/api/v1")
     return app
 
 

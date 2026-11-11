@@ -59,3 +59,23 @@ test("toggles password visibility when show/hide button is clicked", () => {
   expect(pw.type).toBe("password");
   expect(screen.getByRole("button", { name: "Show password" })).toBeInTheDocument();
 });
+
+test("renders judge demo access panel with credentials and logs in as judge demo", async () => {
+  const { onSignIn, onSignUp } = setup();
+  expect(screen.getByTestId("judge-demo-panel")).toBeInTheDocument();
+  expect(screen.getByText("sylvar.judges.demo@gmail.com")).toBeInTheDocument();
+  expect(screen.getByText("Sylvar@Judge26")).toBeInTheDocument();
+
+  const judgeBtn = screen.getByRole("button", { name: /login as judge demo/i });
+  fireEvent.click(judgeBtn);
+
+  await waitFor(() => {
+    expect(onSignIn).toHaveBeenCalledWith("sylvar.judges.demo@gmail.com", "Sylvar@Judge26");
+  });
+  expect(onSignUp).not.toHaveBeenCalled();
+
+  const emailInput = screen.getByLabelText("Email") as HTMLInputElement;
+  const passwordInput = screen.getByLabelText("Password") as HTMLInputElement;
+  expect(emailInput.value).toBe("sylvar.judges.demo@gmail.com");
+  expect(passwordInput.value).toBe("Sylvar@Judge26");
+});

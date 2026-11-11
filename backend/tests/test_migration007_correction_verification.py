@@ -11,7 +11,11 @@ from app.core.config import get_settings
 @pytest.mark.anyio
 async def test_migration007_sql_structure():
     """Verify Migration 007 SQL file declares correct security rules and preconditions."""
-    with open("../supabase/migrations/007_batch2a_final_security_correction.sql", "r", encoding="utf-8") as f:
+    from pathlib import Path
+    mig_path = Path(__file__).resolve().parent.parent.parent / "supabase" / "migrations" / "007_batch2a_final_security_correction.sql"
+    if not mig_path.exists():
+        mig_path = Path("../supabase/migrations/007_batch2a_final_security_correction.sql")
+    with open(mig_path, "r", encoding="utf-8") as f:
         sql = f.read()
 
     # Preconditions

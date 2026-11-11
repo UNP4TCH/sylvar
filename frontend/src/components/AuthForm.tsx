@@ -26,6 +26,21 @@ export default function AuthForm({ onSignIn, onSignUp, error, notice, onModeChan
     }
   }
 
+  async function handleJudgeDemoLogin() {
+    if (busy) return;
+    const demoEmail = "sylvar.judges.demo@gmail.com";
+    const demoPassword = "Sylvar@Judge26";
+    setEmail(demoEmail);
+    setPassword(demoPassword);
+    setMode("signin");
+    setBusy(true);
+    try {
+      await onSignIn(demoEmail, demoPassword);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function toggle() {
     setMode(mode === "signin" ? "signup" : "signin");
     onModeChange?.();
@@ -142,6 +157,45 @@ export default function AuthForm({ onSignIn, onSignUp, error, notice, onModeChan
               </div>
             </div>
           )}
+
+          {/* Judge Demo Access Panel (Evaluation Fast-Track) */}
+          <div className="auth-judge-panel" data-testid="judge-demo-panel">
+            <div className="auth-judge-header">
+              <span className="auth-judge-badge">JUDGE DEMO ACCESS</span>
+              <span className="auth-judge-pill">EVALUATOR QUICK-START</span>
+            </div>
+            <p className="auth-judge-description">
+              Pre-provisioned evaluator account with verified access to the synthetic <em>Aura Botanica Collective</em> workspace without email verification.
+            </p>
+            <div className="auth-judge-creds">
+              <div className="auth-judge-cred-row">
+                <span className="auth-judge-cred-label">Email:</span>
+                <code className="auth-judge-cred-value">sylvar.judges.demo@gmail.com</code>
+              </div>
+              <div className="auth-judge-cred-row">
+                <span className="auth-judge-cred-label">Password:</span>
+                <code className="auth-judge-cred-value">Sylvar@Judge26</code>
+              </div>
+            </div>
+            <button
+              type="button"
+              className="auth-judge-btn"
+              onClick={() => void handleJudgeDemoLogin()}
+              disabled={busy}
+            >
+              {busy ? (
+                <span className="auth-btn-spinner-content">
+                  <svg className="animate-spin h-3.5 w-3.5 text-current" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                  </svg>
+                  Signing in…
+                </span>
+              ) : (
+                "⚡ Login as Judge Demo"
+              )}
+            </button>
+          </div>
 
           {/* Form Fields */}
           <div className="auth-fields-stack">

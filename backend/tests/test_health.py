@@ -1,7 +1,10 @@
 from fastapi.testclient import TestClient
 
+from app.db.session import get_db
 from app.main import app
+from tests.db_helpers import get_test_db
 
+app.dependency_overrides[get_db] = get_test_db
 client = TestClient(app, raise_server_exceptions=False)
 
 
@@ -23,3 +26,10 @@ def test_unknown_route_returns_problem_details() -> None:
 def test_cors_rejects_unlisted_origin() -> None:
     r = client.get("/api/v1/health", headers={"Origin": "https://evil.example"})
     assert "access-control-allow-origin" not in r.headers
+
+
+def test_health_readiness_probe() -> None:
+    r = client.get("/api/v1/health/ready")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ready", "database": "connected"}
+

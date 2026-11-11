@@ -277,7 +277,7 @@ async def test_c07_c08_m09_review_lifecycle(db_session: AsyncSession):
     brand = ClientBrand(id=client_id, workspace_id=ws_id, name="Test Client", code="TC01")
     asset = ContentAsset(id=uuid.uuid4(), workspace_id=ws_id, client_id=client_id, title="Doc", created_by_user_id=user_id)
     version = AssetVersion(id=uuid.uuid4(), workspace_id=ws_id, client_id=client_id, asset_id=asset.id, version_number=1, sha256_hash="abc", created_by_user_id=user_id)
-    snapshot = BrandMemorySnapshot(id=uuid.uuid4(), workspace_id=ws_id, client_id=client_id, memory_version_id=uuid.uuid4(), snapshot_hash="snap1", snapshot_data={})
+    snapshot = BrandMemorySnapshot(id=uuid.uuid4(), workspace_id=ws_id, client_id=client_id, memory_version_id=uuid.uuid4(), snapshot_hash="a" * 64, snapshot_data={})
 
     # Completed audit with an advisory finding
     audit = AuditRun(
@@ -295,7 +295,9 @@ async def test_c07_c08_m09_review_lifecycle(db_session: AsyncSession):
     await db_session.flush()
 
     check = AuditCheck(id=uuid.uuid4(), workspace_id=ws_id, client_id=client_id, audit_run_id=audit.id, engine_type="VISUAL", status="WARNING")
-    db_session.add(check)
+    check_term = AuditCheck(id=uuid.uuid4(), workspace_id=ws_id, client_id=client_id, audit_run_id=audit.id, engine_type="TERMINOLOGY", status="PASS")
+    check_fact = AuditCheck(id=uuid.uuid4(), workspace_id=ws_id, client_id=client_id, audit_run_id=audit.id, engine_type="FACTUAL", status="PASS")
+    db_session.add_all([check, check_term, check_fact])
     await db_session.flush()
 
     finding = AuditFinding(
@@ -329,10 +331,11 @@ async def test_c07_c08_m09_review_lifecycle(db_session: AsyncSession):
     assert exc_info.value.status == 409
     assert exc_info.value.code == "REVIEW_ALREADY_PENDING"
 
-    # Step 2: Decide review
+    # Step 2: Decide review (by an independent Brand Manager per C-08 Separation of Duties)
     from app.modules.reviews.router import ReviewDecisionRequest, decide_review
 
-    bm_ctx = SecurityContext(user_id=user_id, workspace_id=ws_id, workspace_role=UserRole.BRAND_MANAGER, client_id=client_id, client_role=ClientRole.BRAND_MANAGER)
+    bm_id = uuid.uuid4()
+    bm_ctx = SecurityContext(user_id=bm_id, workspace_id=ws_id, workspace_role=UserRole.BRAND_MANAGER, client_id=client_id, client_role=ClientRole.BRAND_MANAGER)
 
     # M-09 Check: Approving without acknowledging advisory finding raises 422
     with pytest.raises(ProblemException) as exc_info:

@@ -27,7 +27,11 @@ from app.core.config import get_settings
 @pytest.mark.anyio
 async def test_migration006_privilege_declarations_least_privilege():
     """Verify Migration 006 SQL enforces least-privilege catalog grants."""
-    with open("../supabase/migrations/006_batch2a_invitation_security.sql", "r", encoding="utf-8") as f:
+    from pathlib import Path
+    mig_path = Path(__file__).resolve().parent.parent.parent / "supabase" / "migrations" / "006_batch2a_invitation_security.sql"
+    if not mig_path.exists():
+        mig_path = Path("../supabase/migrations/006_batch2a_invitation_security.sql")
+    with open(mig_path, "r", encoding="utf-8") as f:
         sql_content = f.read()
 
     # 1. 'authenticated' must have ZERO direct UPDATE permissions

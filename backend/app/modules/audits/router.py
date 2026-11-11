@@ -1,11 +1,15 @@
 """Content Asset and Audit Governance API routes (Domain E & F)."""
+import base64
 import hashlib
+import io
+from pathlib import Path as FilePath
 import unicodedata
 import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Path, status
+from fastapi import APIRouter, Depends, File, Form, Path, UploadFile, status
+from PIL import Image
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +34,7 @@ class AssetCreateRequest(BaseModel):
     title: str = Field(..., min_length=2, max_length=255)
     content_type: ContentType = ContentType.TEXT
     text_content: str | None = Field(default=None)
+    image_base64: str | None = Field(default=None)
 
 
 class AssetVersionResponse(BaseModel):
@@ -129,19 +134,86 @@ async def create_asset(
     ctx: SecurityContext = Depends(require_client_member),
     db: AsyncSession = Depends(get_db),
 ) -> AssetResponse:
-    if payload.content_type != ContentType.TEXT:
+    file_path = None
+    raw_text = None
+
+    if payload.content_type == ContentType.TEXT:
+        if not payload.text_content or not payload.text_content.strip():
+            raise ProblemException(
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                code="TEXT_CONTENT_REQUIRED",
+                title="Text Content Required",
+                detail="A non-empty text body is required for a TEXT asset.",
+            )
+        raw_text = payload.text_content
+        sha256 = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
+    elif payload.content_type == ContentType.IMAGE:
+        if not payload.image_base64:
+            raise ProblemException(
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                code="IMAGE_CONTENT_REQUIRED",
+                title="Image Content Required",
+                detail="image_base64 is required for an IMAGE asset.",
+            )
+        try:
+            raw_img_bytes = base64.b64decode(payload.image_base64)
+            img = Image.open(io.BytesIO(raw_img_bytes))
+            img.verify()
+            if img.width > 4096 or img.height > 4096:
+                raise ProblemException(
+                    status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    code="IMAGE_DIMENSIONS_TOO_LARGE",
+                    title="Image Dimensions Exceeded",
+                    detail="Image dimensions cannot exceed 4096x4096px.",
+                )
+        except ProblemException:
+            raise
+        except Exception:
+            raise ProblemException(
+                status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                code="INVALID_IMAGE_PAYLOAD",
+                title="Invalid Image",
+                detail="The provided image_base64 is not a valid or readable image.",
+            )
+        sha256 = hashlib.sha256(raw_img_bytes).hexdigest()
+        storage_dir = FilePath("uploads/assets") / str(w_id) / str(c_id)
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        file_dest = storage_dir / f"{uuid.uuid4().hex}.png"
+        file_dest.write_bytes(raw_img_bytes)
+        file_path = str(file_dest)
+    elif payload.content_type == ContentType.HYBRID:
+        if not payload.text_content or not payload.image_base64:
+            raise ProblemException(
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                code="HYBRID_CONTENT_REQUIRED",
+                title="Hybrid Content Required",
+                detail="Both text_content and image_base64 are required for a HYBRID asset.",
+            )
+        raw_text = payload.text_content
+        try:
+            raw_img_bytes = base64.b64decode(payload.image_base64)
+            img = Image.open(io.BytesIO(raw_img_bytes))
+            img.verify()
+        except Exception:
+            raise ProblemException(
+                status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                code="INVALID_IMAGE_PAYLOAD",
+                title="Invalid Image",
+                detail="The provided image_base64 is not a valid or readable image.",
+            )
+        combo = raw_text.encode("utf-8") + raw_img_bytes
+        sha256 = hashlib.sha256(combo).hexdigest()
+        storage_dir = FilePath("uploads/assets") / str(w_id) / str(c_id)
+        storage_dir.mkdir(parents=True, exist_ok=True)
+        file_dest = storage_dir / f"{uuid.uuid4().hex}.png"
+        file_dest.write_bytes(raw_img_bytes)
+        file_path = str(file_dest)
+    else:
         raise ProblemException(
             status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             code="CONTENT_TYPE_NOT_SUPPORTED",
             title="Unsupported Content Type",
-            detail="The current MVP supports TEXT assets only. IMAGE and HYBRID assets are disabled until visual upload and audit are implemented.",
-        )
-    if not payload.text_content or not payload.text_content.strip():
-        raise ProblemException(
-            status=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            code="TEXT_CONTENT_REQUIRED",
-            title="Text Content Required",
-            detail="A non-empty text body is required for a TEXT asset.",
+            detail=f"Content type {payload.content_type} is not supported.",
         )
 
     asset = ContentAsset(
@@ -154,21 +226,108 @@ async def create_asset(
     db.add(asset)
     await db.flush()
 
-    raw_text = payload.text_content or ""
-    sha256 = hashlib.sha256(raw_text.encode("utf-8")).hexdigest()
-
     v1 = AssetVersion(
         workspace_id=w_id,
         client_id=c_id,
         asset_id=asset.id,
         version_number=1,
-        text_content=payload.text_content,
+        text_content=raw_text,
+        file_storage_path=file_path,
         sha256_hash=sha256,
         created_by_user_id=ctx.user_id,
     )
     db.add(v1)
     await db.flush()
-    await db.commit()
+
+    return AssetResponse(
+        asset_id=asset.id,
+        workspace_id=w_id,
+        client_id=c_id,
+        title=asset.title,
+        content_type=asset.content_type,
+        latest_version=AssetVersionResponse(
+            version_id=v1.id,
+            asset_id=v1.asset_id,
+            version_number=v1.version_number,
+            text_content=v1.text_content,
+            sha256_hash=v1.sha256_hash,
+            created_from_correction_id=v1.created_from_correction_id,
+            created_at=v1.created_at,
+        ),
+        created_at=asset.created_at,
+    )
+
+
+@router.post(
+    "/workspaces/{w_id}/clients/{c_id}/assets/upload",
+    response_model=AssetResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Upload image asset and initial version (Stage 3 Differentiator)",
+)
+async def upload_asset(
+    title: str = Form(..., min_length=2, max_length=255),
+    file: UploadFile = File(...),
+    w_id: uuid.UUID = Path(..., description="Workspace ID"),
+    c_id: uuid.UUID = Path(..., description="Client Brand ID"),
+    ctx: SecurityContext = Depends(require_client_member),
+    db: AsyncSession = Depends(get_db),
+) -> AssetResponse:
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise ProblemException(
+            status=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            code="FILE_TOO_LARGE",
+            title="File Too Large",
+            detail="Asset image file exceeds the 10 MB limit.",
+        )
+    try:
+        img = Image.open(io.BytesIO(content))
+        img.verify()
+        if img.width > 4096 or img.height > 4096:
+            raise ProblemException(
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                code="IMAGE_DIMENSIONS_TOO_LARGE",
+                title="Image Dimensions Exceeded",
+                detail="Image dimensions cannot exceed 4096x4096px.",
+            )
+    except ProblemException:
+        raise
+    except Exception:
+        raise ProblemException(
+            status=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            code="INVALID_IMAGE_FILE",
+            title="Unsupported Media Type",
+            detail="Uploaded file is not a valid PNG, JPEG, or WEBP image.",
+        )
+
+    asset = ContentAsset(
+        workspace_id=w_id,
+        client_id=c_id,
+        title=title,
+        content_type=ContentType.IMAGE.value,
+        created_by_user_id=ctx.user_id,
+    )
+    db.add(asset)
+    await db.flush()
+
+    storage_dir = FilePath("uploads/assets") / str(w_id) / str(c_id)
+    storage_dir.mkdir(parents=True, exist_ok=True)
+    file_dest = storage_dir / f"{uuid.uuid4().hex}.png"
+    file_dest.write_bytes(content)
+
+    sha256 = hashlib.sha256(content).hexdigest()
+    v1 = AssetVersion(
+        workspace_id=w_id,
+        client_id=c_id,
+        asset_id=asset.id,
+        version_number=1,
+        text_content=None,
+        file_storage_path=str(file_dest),
+        sha256_hash=sha256,
+        created_by_user_id=ctx.user_id,
+    )
+    db.add(v1)
+    await db.flush()
 
     return AssetResponse(
         asset_id=asset.id,
@@ -272,12 +431,12 @@ async def trigger_audit(
             title="Not Found",
             detail="Content asset not found.",
         )
-    if asset.content_type != ContentType.TEXT.value:
+    if asset.content_type not in (ContentType.TEXT.value, ContentType.IMAGE.value, ContentType.HYBRID.value):
         raise ProblemException(
             status=status.HTTP_422_UNPROCESSABLE_ENTITY,
             code="CONTENT_TYPE_NOT_SUPPORTED",
             title="Unsupported Content Type",
-            detail="Only TEXT assets can be audited in the current MVP. IMAGE and HYBRID audits are disabled.",
+            detail=f"Content type {asset.content_type} is not supported for auditing.",
         )
 
     # 2. Fetch asset version
@@ -295,6 +454,21 @@ async def trigger_audit(
             title="Not Found",
             detail="Asset version not found.",
         )
+
+    # Resolve image bytes if visual asset
+    image_bytes = None
+    if asset.content_type in (ContentType.IMAGE.value, ContentType.HYBRID.value):
+        if version.file_storage_path:
+            p = FilePath(version.file_storage_path)
+            if p.exists():
+                image_bytes = p.read_bytes()
+        if not image_bytes:
+            raise ProblemException(
+                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                code="IMAGE_PAYLOAD_MISSING",
+                title="Image Content Missing",
+                detail="The visual asset file could not be found for audit execution.",
+            )
 
     # 3. Fetch active memory snapshot for brand
     brand = await db.get(ClientBrand, c_id)
@@ -331,11 +505,11 @@ async def trigger_audit(
         snapshot_id=snapshot.id,
         rules=rules_data,
         text_content=version.text_content,
-        image_bytes=None,  # pure text audit for this version
+        image_bytes=image_bytes,
         user_id=ctx.user_id,
         db=db,
     )
-    await db.commit()
+    await db.flush()
 
     # Reload relationships for response
     return await _build_audit_response(audit_run.id, db)

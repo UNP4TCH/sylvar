@@ -30,7 +30,12 @@ from app.models.audit import (
 )
 from app.modules.engine_factual.verifier import run_async_factual_check
 from app.modules.engine_terminology.matcher import run_terminology_check
-from app.modules.engine_visual.analyzer import run_visual_check
+from app.modules.engine_visual.analyzer import (
+    compute_wcag_contrast,
+    extract_dominant_colors,
+    rgb_to_hex,
+    run_visual_check,
+)
 
 logger = logging.getLogger("sylvar.orchestrator")
 
@@ -65,6 +70,8 @@ async def execute_audit(
     async def _execute_terminology() -> tuple[str, int, list[Any], dict[str, Any]]:
         t0 = time.perf_counter()
         if not text_content or not text_content.strip():
+            if image_bytes:
+                return "PASS", 0, [], {"skipped": True, "reason": "Pure image asset; text terminology check skipped."}
             return "FAIL", 0, [], {"skipped": True, "reason": "Required text content is missing."}
         status, findings = run_terminology_check(text_content, rules)
         duration_ms = int((time.perf_counter() - t0) * 1000)
@@ -73,6 +80,8 @@ async def execute_audit(
     async def _execute_factual() -> tuple[str, int, list[Any], dict[str, Any]]:
         t0 = time.perf_counter()
         if not text_content or not text_content.strip():
+            if image_bytes:
+                return "PASS", 0, [], {"skipped": True, "reason": "Pure image asset; factual check skipped."}
             return "FAIL", 0, [], {"skipped": True, "reason": "Required text content is missing."}
         settings = get_settings()
         status, findings, details = await run_async_factual_check(
@@ -86,11 +95,27 @@ async def execute_audit(
         if not image_bytes:
             return "PASS", 0, [], {
                 "skipped": True,
-                "reason": "MVP supports TEXT assets only; image auditing is not available.",
+                "reason": "Pure text asset; image visual audit skipped.",
             }
         status, findings = run_visual_check(image_bytes, rules)
         duration_ms = int((time.perf_counter() - t0) * 1000)
-        return status, duration_ms, findings, {"advisory_count": len(findings)}
+        dominant_colors = extract_dominant_colors(image_bytes)
+        dominant_hexes = [rgb_to_hex(*c) for c in dominant_colors]
+        wcag_info: dict[str, Any] = {}
+        if len(dominant_colors) >= 2:
+            wcag_ratio = compute_wcag_contrast(dominant_colors[0], dominant_colors[1])
+            wcag_info = {
+                "contrast_ratio": wcag_ratio,
+                "compliant_aa": wcag_ratio >= 4.5,
+                "c1_hex": dominant_hexes[0],
+                "c2_hex": dominant_hexes[1],
+            }
+        details = {
+            "advisory_count": len(findings),
+            "dominant_palette": dominant_hexes,
+            "wcag_contrast": wcag_info,
+        }
+        return status, duration_ms, findings, details
 
     # 3. Concurrently execute with exception isolation
     results = await asyncio.gather(
@@ -109,7 +134,7 @@ async def execute_audit(
     if isinstance(term_res, BaseException):
         logger.exception("Terminology engine internal error: %s", term_res)
         engine_failure = True
-        failure_errors.append("Terminology compliance engine encountered an internal execution error.")
+        failure_errors.append(f"Terminology engine crashed: {term_res}")
         all_findings_severities.append("CRITICAL")
         check_term = AuditCheck(
             workspace_id=workspace_id,
@@ -185,7 +210,7 @@ async def execute_audit(
     if isinstance(fact_res, BaseException):
         logger.exception("Factual verification engine internal error: %s", fact_res)
         engine_failure = True
-        failure_errors.append("Factual verification engine encountered an internal execution error.")
+        failure_errors.append(f"Factual verification engine error: {fact_res}")
         all_findings_severities.append("CRITICAL")
         check_fact = AuditCheck(
             workspace_id=workspace_id,
@@ -215,7 +240,7 @@ async def execute_audit(
         settings = get_settings()
         is_live_gemini = details.get("engine_mode") == "gemini_live" and not details.get("provider_error")
 
-        if not is_live_gemini:
+        if not is_live_gemini and not details.get("skipped"):
             if settings.allow_offline_demo:
                 is_factual_offline_demo = True
                 details["demo_mode"] = True

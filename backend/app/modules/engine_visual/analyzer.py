@@ -210,18 +210,39 @@ def extract_dominant_colors(image_bytes: bytes, max_colors: int = 5) -> list[tup
     return dominant
 
 
+def compute_relative_luminance(rgb: tuple[int, int, int]) -> float:
+    """Compute relative luminance according to WCAG 2.1 standard."""
+    def linearize(c: int) -> float:
+        c_lin = c / 255.0
+        return c_lin / 12.92 if c_lin <= 0.04045 else ((c_lin + 0.055) / 1.055) ** 2.4
+
+    r = linearize(rgb[0])
+    g = linearize(rgb[1])
+    b = linearize(rgb[2])
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def compute_wcag_contrast(rgb1: tuple[int, int, int], rgb2: tuple[int, int, int]) -> float:
+    """Compute WCAG 2.1 contrast ratio between two colors (ranging from 1.0 to 21.0)."""
+    l1 = compute_relative_luminance(rgb1)
+    l2 = compute_relative_luminance(rgb2)
+    lighter = max(l1, l2)
+    darker = min(l1, l2)
+    return round((lighter + 0.05) / (darker + 0.05), 2)
+
+
 def run_visual_check(
     image_bytes: bytes, rules: list[dict[str, Any]]
 ) -> tuple[str, list[VisualFinding]]:
-    """Execute visual color compliance check against approved brand color palette.
+    """Execute visual color and layout compliance check against approved brand rules.
 
     Returns:
         (check_status: "PASS" | "WARNING", findings: list[VisualFinding])
     """
-    color_rules = [r for r in rules if r.get("category") == "COLOR"]
-    if not color_rules:
-        return "PASS", []
+    findings: list[VisualFinding] = []
 
+    # 1. Palette check against brand colors
+    color_rules = [r for r in rules if r.get("category") == "COLOR"]
     brand_colors = []
     for r in color_rules:
         hex_val = r.get("content", {}).get("hex") or r.get("content", {}).get("hex_code")
@@ -236,45 +257,106 @@ def run_visual_check(
                 }
             )
 
-    if not brand_colors:
-        return "PASS", []
-
     dominant_rgbs = extract_dominant_colors(image_bytes)
-    findings: list[VisualFinding] = []
 
-    for dom_rgb in dominant_rgbs:
-        dom_lab = rgb_to_lab(dom_rgb)
-        dom_hex = rgb_to_hex(*dom_rgb)
+    if brand_colors:
+        for dom_rgb in dominant_rgbs:
+            dom_lab = rgb_to_lab(dom_rgb)
+            dom_hex = rgb_to_hex(*dom_rgb)
 
-        # Find closest brand color
-        closest = None
-        min_de = float("inf")
+            # Find closest brand color
+            closest = None
+            min_de = float("inf")
 
-        for b_col in brand_colors:
-            de = ciede2000(dom_lab, b_col["lab"])
-            if de < min_de:
-                min_de = de
-                closest = b_col
+            for b_col in brand_colors:
+                de = ciede2000(dom_lab, b_col["lab"])
+                if de < min_de:
+                    min_de = de
+                    closest = b_col
 
-        # ADR-008: Delta E > 5.0 is advisory
-        if min_de > 5.0 and closest:
+            # ADR-008: Delta E > 5.0 is advisory
+            if min_de > 5.0 and closest:
+                findings.append(
+                    VisualFinding(
+                        rule_id=closest["rule_id"],
+                        rule_code=closest["rule_code"],
+                        severity="ADVISORY",  # Strictly advisory per ADR-008
+                        message=f"Dominant color {dom_hex} differs from nearest brand color {closest['hex']} (ΔE₀₀ = {min_de}).",
+                        dominant_hex=dom_hex,
+                        closest_brand_hex=closest["hex"],
+                        delta_e=min_de,
+                        evidence={
+                            "dominant_hex": dom_hex,
+                            "closest_brand_hex": closest["hex"],
+                            "delta_e": min_de,
+                            "advisory_threshold": 5.0,
+                        },
+                    )
+                )
+
+    # 2. WCAG Contrast Check between primary dominant colors
+    if len(dominant_rgbs) >= 2:
+        c1, c2 = dominant_rgbs[0], dominant_rgbs[1]
+        c1_hex, c2_hex = rgb_to_hex(*c1), rgb_to_hex(*c2)
+        contrast = compute_wcag_contrast(c1, c2)
+        if contrast < 4.5:
             findings.append(
                 VisualFinding(
-                    rule_id=closest["rule_id"],
-                    rule_code=closest["rule_code"],
-                    severity="ADVISORY",  # Strictly advisory per ADR-008
-                    message=f"Dominant color {dom_hex} differs from nearest brand color {closest['hex']} (ΔE₀₀ = {min_de}).",
-                    dominant_hex=dom_hex,
-                    closest_brand_hex=closest["hex"],
-                    delta_e=min_de,
+                    rule_id=None,
+                    rule_code="VISUAL-WCAG-CONTRAST",
+                    severity="ADVISORY",
+                    message=f"Contrast ratio between primary dominant colors {c1_hex} and {c2_hex} is {contrast:.2f}:1, below WCAG AA requirement of 4.5:1.",
+                    dominant_hex=c1_hex,
+                    closest_brand_hex=c2_hex,
+                    delta_e=contrast,
                     evidence={
-                        "dominant_hex": dom_hex,
-                        "closest_brand_hex": closest["hex"],
-                        "delta_e": min_de,
-                        "advisory_threshold": 5.0,
+                        "foreground_hex": c1_hex,
+                        "background_hex": c2_hex,
+                        "measured_contrast": contrast,
+                        "wcag_threshold": 4.5,
+                        "standard": "WCAG_2.1_AA",
                     },
                 )
             )
+
+    # 3. Logo/Asset Dimensional Rules
+    logo_rules = [r for r in rules if r.get("category") == "LOGO"]
+    if logo_rules:
+        try:
+            with Image.open(io.BytesIO(image_bytes)) as img:
+                w, h = img.size
+                for lr in logo_rules:
+                    content = lr.get("content", {})
+                    min_w = content.get("min_width")
+                    min_h = content.get("min_height")
+                    if min_w and w < min_w:
+                        findings.append(
+                            VisualFinding(
+                                rule_id=lr.get("rule_id"),
+                                rule_code=f"{lr.get('rule_code', 'RULE-LOGO')}-MIN-WIDTH",
+                                severity="ADVISORY",
+                                message=f"Asset width {w}px is below minimum required logo width of {min_w}px.",
+                                dominant_hex="",
+                                closest_brand_hex="",
+                                delta_e=0.0,
+                                evidence={"measured_width": w, "required_min_width": min_w, "rule_code": lr.get("rule_code")},
+                            )
+                        )
+                    if min_h and h < min_h:
+                        findings.append(
+                            VisualFinding(
+                                rule_id=lr.get("rule_id"),
+                                rule_code=f"{lr.get('rule_code', 'RULE-LOGO')}-MIN-HEIGHT",
+                                severity="ADVISORY",
+                                message=f"Asset height {h}px is below minimum required logo height of {min_h}px.",
+                                dominant_hex="",
+                                closest_brand_hex="",
+                                delta_e=0.0,
+                                evidence={"measured_height": h, "required_min_height": min_h, "rule_code": lr.get("rule_code")},
+                            )
+                        )
+        except Exception:
+            pass
 
     status = "WARNING" if findings else "PASS"
     return status, findings

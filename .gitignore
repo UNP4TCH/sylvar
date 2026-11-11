@@ -112,3 +112,36 @@ Desktop.ini
 *.sublime-workspace
 *.swp
 *~
+
+# Internal Agent Control Packs & Orchestration Materials (NEVER PUSH)
+SYLVAR_Round3_Agent_Control_Pack/
+docs/control-pack/
+AGENT.md
+RULES.md
+PHASE.md
+TASKS.md
+QUALITY_GATES.md
+PROJECT_CONTEXT.md
+DECISIONS.md
+STATUS_REPORT_TEMPLATE.md
+DEMO_AND_SUBMISSION.md
+
+# Internal Development & Audit Verification Reports (NEVER PUSH)
+docs/reports/
+docs/*_REPORT.md
+docs/*_REPORT*.md
+docs/*_AUDIT*.md
+docs/STAGE_*
+docs/P0_*
+docs/PHASE1_*
+docs/ROUND2_*
+docs/DEMO_*
+docs/SUBMISSION_*
+docs/TEST_*
+docs/SECURITY_NOTES.md
+docs/LOCAL_SETUP_AND_VERIFICATION.md
+
+# Local Scratch, Uploads, and Temporary Provisioning Scripts
+uploads/
+backend/scripts/
+scratch/
