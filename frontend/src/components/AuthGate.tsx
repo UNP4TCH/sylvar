@@ -36,9 +36,9 @@ export default function AuthGate({ apiBaseUrl }: { apiBaseUrl: string }) {
   }
 
   return (
-    <div className="min-h-screen w-full bg-[#0b0b0d] text-[#e8e6e3] flex flex-col m-0 p-0 overflow-x-hidden">
+    <div className="h-screen h-[100dvh] w-full bg-[#0b0b0d] text-[#e8e6e3] flex flex-col m-0 p-0 overflow-hidden">
       {error && (
-        <div className="w-full px-6 pt-3 bg-[#0b0b0d]">
+        <div className="w-full px-4 sm:px-6 pt-3 bg-[#0b0b0d] flex-shrink-0">
           <div role="alert" className="p-3 bg-[#2a1917] border border-[#743b31] text-[#ff9a85] rounded-xl text-xs flex items-center justify-between">
             <span>{error}</span>
           </div>

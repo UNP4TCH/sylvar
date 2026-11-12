@@ -47,31 +47,62 @@ body {
 
 .sylvar-dashboard-shell {
   width: 100%;
-  min-height: 100vh;
+  height: 100vh;
+  height: 100dvh;
   margin: 0;
   padding: 0;
   display: flex;
   color: #d8d5d1;
   background: #0d0c0e;
+  overflow: hidden;
+  position: relative;
 }
 
 .sylvar-sidebar {
   width: 256px;
   flex: 0 0 256px;
-  min-height: 100vh;
-  padding: 24px 16px 20px;
+  height: 100vh;
+  height: 100dvh;
+  padding: 20px 16px 16px;
   display: flex;
   flex-direction: column;
   background: #111013;
   border-right: 1px solid #232026;
-  z-index: 30;
+  z-index: 40;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-sizing: border-box;
+  scroll-behavior: smooth;
+}
+
+.sylvar-sidebar::-webkit-scrollbar,
+.sylvar-dashboard-content::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+.sylvar-sidebar::-webkit-scrollbar-track,
+.sylvar-dashboard-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sylvar-sidebar::-webkit-scrollbar-thumb,
+.sylvar-dashboard-content::-webkit-scrollbar-thumb {
+  background: #25222b;
+  border-radius: 4px;
+}
+
+.sylvar-sidebar::-webkit-scrollbar-thumb:hover,
+.sylvar-dashboard-content::-webkit-scrollbar-thumb:hover {
+  background: #3c3546;
 }
 
 .sylvar-brand-lockup {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
-  padding: 0 8px 30px;
+  padding: 0 4px 22px;
   color: #f5f0eb;
 }
 
@@ -278,62 +309,85 @@ body {
   flex: 1;
   min-width: 0;
   width: 100%;
+  height: 100vh;
+  height: 100dvh;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
+  overflow: hidden;
+  background: #0d0c0e;
 }
 
 .sylvar-dashboard-topbar {
-  min-height: 76px;
+  flex-shrink: 0;
+  min-height: 64px;
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
-  padding: 18px clamp(20px, 3.2vw, 44px);
+  gap: 16px;
+  padding: 12px clamp(16px, 2.5vw, 32px);
   border-bottom: 1px solid #221f27;
   background: #100f13;
+  z-index: 20;
 }
 
 .sylvar-topbar-kicker {
   color: #9c9189;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 500;
   letter-spacing: 0.04em;
 }
 
 .sylvar-topbar-kicker span {
-  padding: 0 6px;
+  padding: 0 4px;
   color: #554d46;
 }
 
 .sylvar-dashboard-topbar h1 {
-  margin: 4px 0 2px;
+  margin: 2px 0 1px;
   color: #f7f1eb;
-  font: 600 clamp(20px, 2.2vw, 26px)/1.2 Inter, -apple-system, sans-serif;
+  font: 600 clamp(18px, 1.8vw, 22px)/1.2 Inter, -apple-system, sans-serif;
   letter-spacing: -0.02em;
 }
 
 .sylvar-dashboard-topbar p {
   margin: 0;
   color: #948880;
-  font-size: 12px;
+  font-size: 11.5px;
 }
 
 .sylvar-topbar-actions {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .sylvar-dashboard-content {
   flex: 1;
+  min-height: 0;
   width: 100%;
   max-width: 100%;
   margin: 0;
-  padding: 24px clamp(20px, 3.2vw, 44px) 56px;
+  padding: 18px clamp(16px, 2.5vw, 32px) 44px;
   box-sizing: border-box;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scroll-behavior: smooth;
+}
+
+/* Navigation Drawer Elements (Desktop Hidden) */
+.sylvar-nav-toggle {
+  display: none;
+}
+
+.sylvar-sidebar-close {
+  display: none;
+}
+
+.sylvar-sidebar-backdrop {
+  display: none;
 }
 
 /* ==========================================================================
@@ -702,66 +756,107 @@ body {
 }
 
 /* ==========================================================================
-   RESPONSIVE LAYOUT (1440px, 1280px, 1024px, 768px, 375px)
+   RESPONSIVE LAYOUT (1920px, 1440px, 1280px, 1024px, 768px, 430px, 375px, 320px)
    ========================================================================== */
-@media (max-width: 1024px) {
-  .sylvar-sidebar {
-    width: 220px;
-    flex-basis: 220px;
+@media (max-width: 1023px) {
+  .sylvar-nav-toggle {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    gap: 4px;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    border-radius: 6px;
+    background: #18161e;
+    border: 1px solid #2d2936;
+    color: #dfd4cc;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s, border-color 0.15s;
   }
-  .sylvar-overview-workflow {
+  .sylvar-nav-toggle:hover {
+    background: #232029;
+    border-color: #3f394a;
+    color: #f7f1eb;
+  }
+  .sylvar-nav-toggle-bar {
+    display: block;
+    width: 15px;
+    height: 2px;
+    border-radius: 1px;
+    background: currentColor;
+  }
+  .sylvar-sidebar-close {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    margin-left: auto;
+    border-radius: 6px;
+    background: #1c1a21;
+    border: 1px solid #2e2838;
+    color: #9a8e84;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+  .sylvar-sidebar-close:hover {
+    background: #26222e;
+    color: #f7f1eb;
+  }
+  .sylvar-sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(6, 6, 8, 0.75);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 45;
+  }
+  .sylvar-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    height: 100vh;
+    height: 100dvh;
+    width: 270px;
+    max-width: 82vw;
+    flex: none;
+    transform: translateX(-100%);
+    box-shadow: none;
+    z-index: 50;
+    transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease;
+  }
+  .sylvar-sidebar.sylvar-sidebar-open {
+    transform: translateX(0);
+    box-shadow: 0 0 35px rgba(0, 0, 0, 0.8), 0 0 0 1px #2b2533;
+  }
+  .sylvar-overview-grid {
     grid-template-columns: 1fr;
-    gap: 28px;
+    gap: 16px;
   }
 }
 
-@media (max-width: 768px) {
-  .sylvar-dashboard-shell {
-    display: flex;
-    flex-direction: column;
-  }
-  .sylvar-sidebar {
-    width: 100%;
-    min-height: auto;
-    padding: 16px 20px 12px;
-    border-right: none;
-    border-bottom: 1px solid #2b2523;
-  }
-  .sylvar-brand-lockup {
-    padding: 0 0 12px;
-  }
-  .sylvar-sidebar-section-label,
-  .sylvar-sidebar-context,
-  .sylvar-sidebar-bottom {
-    display: none;
-  }
-  .sylvar-side-nav {
-    display: flex;
-    overflow-x: auto;
-    gap: 6px;
-    padding-bottom: 4px;
-  }
-  .sylvar-side-nav button {
-    flex: none;
-    min-height: 38px;
-    padding: 0 12px;
-    white-space: nowrap;
-  }
+@media (max-width: 767px) {
   .sylvar-dashboard-topbar {
     min-height: auto;
     flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-    padding: 20px 18px;
+    align-items: stretch;
+    gap: 12px;
+    padding: 12px 14px;
   }
   .sylvar-topbar-actions {
     width: 100%;
     flex-wrap: wrap;
     justify-content: flex-start;
-    gap: 10px;
+    gap: 8px;
   }
   .sylvar-dashboard-content {
-    padding: 20px 16px 48px;
+    padding: 14px 12px 36px;
   }
   .sylvar-overview-stats {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -791,7 +886,7 @@ body {
     border-top: 0;
   }
   .sylvar-dashboard-topbar h1 {
-    font-size: 22px;
+    font-size: 19px;
   }
 }
 

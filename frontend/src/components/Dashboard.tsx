@@ -198,6 +198,12 @@ export default function Dashboard({
   const [activePipelineTab, setActivePipelineTab] = useState<
     "ALL" | "MEMORY" | "AUDIT" | "GOVERNANCE" | "CONTRADICTIONS" | "ANALYTICS"
   >("ALL");
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const selectTab = (tab: "ALL" | "MEMORY" | "AUDIT" | "GOVERNANCE" | "CONTRADICTIONS" | "ANALYTICS") => {
+    setActivePipelineTab(tab);
+    setMobileNavOpen(false);
+  };
 
   // Multimodal visual asset state (Stage 3.1 & 4)
   const [assetType, setAssetType] = useState<"TEXT" | "IMAGE" | "HYBRID">("TEXT");
@@ -905,8 +911,29 @@ export default function Dashboard({
 
   return (
     <div className="sylvar-dashboard-shell">
-      <aside className="sylvar-sidebar">
-        <div className="sylvar-brand-lockup"><span className="sylvar-brand-mark">S</span><span><strong>SYLVAR</strong><small>BRAND INTEGRITY PLATFORM</small></span></div>
+      {/* Mobile Backdrop Overlay */}
+      {mobileNavOpen && (
+        <div
+          className="sylvar-sidebar-backdrop lg:hidden"
+          onClick={() => setMobileNavOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+      <aside className={`sylvar-sidebar ${mobileNavOpen ? "sylvar-sidebar-open" : ""}`}>
+        <div className="sylvar-brand-lockup">
+          <div className="flex items-center gap-3">
+            <span className="sylvar-brand-mark">S</span>
+            <span><strong>SYLVAR</strong><small>BRAND INTEGRITY PLATFORM</small></span>
+          </div>
+          <button
+            type="button"
+            className="sylvar-sidebar-close lg:hidden"
+            onClick={() => setMobileNavOpen(false)}
+            aria-label="Close navigation"
+          >
+            ✕
+          </button>
+        </div>
         <div className="sylvar-sidebar-section-label">WORKSPACE</div>
         <div className="sylvar-sidebar-context">
           <span className="sylvar-context-dot" />
@@ -914,12 +941,12 @@ export default function Dashboard({
         </div>
         <div className="sylvar-sidebar-section-label">GOVERNANCE</div>
         <nav className="sylvar-side-nav" aria-label="Main navigation">
-          <button type="button" className={activePipelineTab === "ALL" ? "active" : ""} onClick={() => setActivePipelineTab("ALL")}><span className="nav-icon">⌂</span>Overview</button>
-          <button type="button" className={activePipelineTab === "MEMORY" ? "active" : ""} onClick={() => setActivePipelineTab("MEMORY")}><span className="nav-icon">◈</span>Living memory{candidateSummary.pending > 0 && <i>{candidateSummary.pending}</i>}</button>
-          <button type="button" className={activePipelineTab === "CONTRADICTIONS" ? "active" : ""} onClick={() => setActivePipelineTab("CONTRADICTIONS")}><span className="nav-icon">⚡</span>Contradictions</button>
-          <button type="button" className={activePipelineTab === "AUDIT" ? "active" : ""} onClick={() => setActivePipelineTab("AUDIT")}><span className="nav-icon">✳</span>Governance studio</button>
-          <button type="button" className={activePipelineTab === "GOVERNANCE" ? "active" : ""} onClick={() => setActivePipelineTab("GOVERNANCE")}><span className="nav-icon">▤</span>Review queue{reviews.length > 0 && <i>{reviews.length}</i>}</button>
-          <button type="button" className={activePipelineTab === "ANALYTICS" ? "active" : ""} onClick={() => setActivePipelineTab("ANALYTICS")}><span className="nav-icon">📊</span>Analytics</button>
+          <button type="button" className={activePipelineTab === "ALL" ? "active" : ""} onClick={() => selectTab("ALL")}><span className="nav-icon">⌂</span>Overview</button>
+          <button type="button" className={activePipelineTab === "MEMORY" ? "active" : ""} onClick={() => selectTab("MEMORY")}><span className="nav-icon">◈</span>Living memory{candidateSummary.pending > 0 && <i>{candidateSummary.pending}</i>}</button>
+          <button type="button" className={activePipelineTab === "CONTRADICTIONS" ? "active" : ""} onClick={() => selectTab("CONTRADICTIONS")}><span className="nav-icon">⚡</span>Contradictions</button>
+          <button type="button" className={activePipelineTab === "AUDIT" ? "active" : ""} onClick={() => selectTab("AUDIT")}><span className="nav-icon">✳</span>Governance studio</button>
+          <button type="button" className={activePipelineTab === "GOVERNANCE" ? "active" : ""} onClick={() => selectTab("GOVERNANCE")}><span className="nav-icon">▤</span>Review queue{reviews.length > 0 && <i>{reviews.length}</i>}</button>
+          <button type="button" className={activePipelineTab === "ANALYTICS" ? "active" : ""} onClick={() => selectTab("ANALYTICS")}><span className="nav-icon">📊</span>Analytics</button>
         </nav>
         <div className="sylvar-sidebar-bottom">
           <div className="sylvar-sidebar-status"><span className="sylvar-live-dot"/> API CONNECTED</div>
@@ -934,10 +961,23 @@ export default function Dashboard({
       </aside>
       <main className="sylvar-dashboard-main">
         <header className="sylvar-dashboard-topbar">
-          <div>
-            <span className="sylvar-topbar-kicker">SYLVAR <span>/</span> {pageMeta.eyebrow}</span>
-            <h1>{pageMeta.title}</h1>
-            <p>{pageMeta.description}</p>
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              type="button"
+              className="sylvar-nav-toggle lg:hidden"
+              onClick={() => setMobileNavOpen(!mobileNavOpen)}
+              aria-label="Toggle navigation menu"
+              aria-expanded={mobileNavOpen}
+            >
+              <span className="sylvar-nav-toggle-bar" />
+              <span className="sylvar-nav-toggle-bar" />
+              <span className="sylvar-nav-toggle-bar" />
+            </button>
+            <div className="min-w-0">
+              <span className="sylvar-topbar-kicker truncate block">SYLVAR <span>/</span> {pageMeta.eyebrow}</span>
+              <h1 className="truncate">{pageMeta.title}</h1>
+              <p className="truncate sm:whitespace-normal">{pageMeta.description}</p>
+            </div>
           </div>
           <div className="sylvar-topbar-actions">
             <ApiStatus baseUrl={apiBaseUrl} />
@@ -951,7 +991,7 @@ export default function Dashboard({
             </button>
             <div className="flex items-center gap-2 bg-[#151418] border border-[#28242f] rounded-md py-1 px-3 text-xs">
               <span className="h-1.5 w-1.5 rounded-full bg-[#4ade80]" />
-              <span className="text-[#dfd4cc] font-medium">{sessionUserEmail || userProfile?.email || "Signed in"}</span>
+              <span className="text-[#dfd4cc] font-medium truncate max-w-[140px] sm:max-w-[200px]">{sessionUserEmail || userProfile?.email || "Signed in"}</span>
             </div>
             {onSignOut && (
               <button
@@ -964,7 +1004,7 @@ export default function Dashboard({
             )}
           </div>
         </header>
-        <div className="sylvar-dashboard-content space-y-6">
+        <div className="sylvar-dashboard-content space-y-5">
       {/* GLOBAL TOAST / ALERT NOTIFICATION */}
       {message && (
         <div
