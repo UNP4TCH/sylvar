@@ -45,10 +45,14 @@ export interface UploadContext {
   clientsStatus: LoadStatus;
   workspacesError: string | null;
   clientsError: string | null;
+  isBrandManager?: boolean;
 }
 
 /** null = upload allowed. Otherwise the exact reason it is not. */
 export function getUploadBlockReason(c: UploadContext): string | null {
+  if (c.isBrandManager === false) {
+    return "Guideline ingestion and candidate rule extraction are restricted to Brand Managers. Your current client assignment is CONTENT_CREATOR.";
+  }
   if (!c.selectedWs) {
     if (c.workspacesStatus === "loading") return "Workspaces are still loading.";
     if (c.workspacesStatus === "error")
@@ -71,9 +75,13 @@ export interface ActivationContext {
   memoryStatus: LoadStatus;
   memoryError: string | null;
   summary: CandidateSummary;
+  isBrandManager?: boolean;
 }
 
 export function getActivationBlockReason(c: ActivationContext): string | null {
+  if (c.isBrandManager === false) {
+    return "Living brand memory activation is restricted to Brand Managers. Your current client assignment is CONTENT_CREATOR.";
+  }
   if (c.memoryStatus === "loading") return "Checking the current active memory version…";
   if (c.memoryStatus === "error")
     return `Activation blocked: the current memory version could not be read, so a new version tag cannot be chosen safely. ${c.memoryError ?? ""}`.trim();

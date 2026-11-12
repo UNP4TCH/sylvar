@@ -536,6 +536,12 @@ export default function Dashboard({
 
   async function handleUploadAndExtract() {
     if (!selectedWs || !selectedClient) return;
+    if (!isBrandManager) {
+      setMessage(
+        `Extraction restricted: Only Brand Managers can upload documents or extract rules. Your current client assignment is ${currentClientRole}.`
+      );
+      return;
+    }
 
     if (selectedFile) {
       setLoading(true);
@@ -595,6 +601,12 @@ export default function Dashboard({
 
   async function handleApproveAndActivate() {
     if (!selectedWs || !selectedClient) return;
+    if (!isBrandManager) {
+      setMessage(
+        `Activation restricted: Only Brand Managers can activate brand memory releases. Your current client assignment is ${currentClientRole}.`
+      );
+      return;
+    }
 
     const pendingCandidates = candidates.filter(
       (c) => c.review_status === "PENDING_REVIEW" || c.review_status === "MODIFIED_APPROVED"
@@ -878,6 +890,13 @@ export default function Dashboard({
     URL.revokeObjectURL(url);
   }
 
+  // User assignments in active client
+  const currentClientAssignment = userProfile?.client_assignments?.find(
+    (ca) => ca.client_id === selectedClient
+  );
+  const currentClientRole = currentClientAssignment?.client_role || "CONTENT_CREATOR";
+  const isBrandManager = currentClientRole === "BRAND_MANAGER";
+
   const uploadBlockReason = getUploadBlockReason({
     selectedWs,
     selectedClient,
@@ -885,20 +904,15 @@ export default function Dashboard({
     clientsStatus,
     workspacesError: loadErrors.workspaces,
     clientsError: loadErrors.clients,
+    isBrandManager,
   });
   const candidateSummary = summarizeCandidates(candidates);
   const activationBlockReason = getActivationBlockReason({
     memoryStatus,
     memoryError: loadErrors.memory,
     summary: candidateSummary,
+    isBrandManager,
   });
-
-  // User assignments in active client
-  const currentClientAssignment = userProfile?.client_assignments?.find(
-    (ca) => ca.client_id === selectedClient
-  );
-  const currentClientRole = currentClientAssignment?.client_role || "CONTENT_CREATOR";
-  const isBrandManager = currentClientRole === "BRAND_MANAGER";
 
   const pageMeta = {
     ALL: { eyebrow: "WORKSPACE OVERVIEW", title: "Good to see you.", description: "Your brand governance workspace at a glance." },
@@ -1323,6 +1337,17 @@ export default function Dashboard({
               Brand Manager Role
             </span>
           </div>
+
+          {/* Guideline Ingestion Role Warning */}
+          {!isBrandManager && (
+            <div className="bg-[#201a14] border border-[#4d381c] rounded-md p-3 text-xs text-[#fbbf24] flex items-center gap-2">
+              <span className="text-base">⚠️</span>
+              <span>
+                Guideline ingestion and candidate rule extraction are restricted to <strong>Brand Managers</strong>.
+                Your current client assignment is <strong>{currentClientRole}</strong>.
+              </span>
+            </div>
+          )}
 
           {/* Guideline File Upload Dropzone */}
           <div className="bg-[#161519] border border-[#232027] rounded-md p-4 space-y-3">
@@ -1877,6 +1902,17 @@ export default function Dashboard({
               Brand Manager Role
             </span>
           </div>
+
+          {/* Review Queue Role Notice */}
+          {!isBrandManager && (
+            <div className="bg-[#201a14] border border-[#4d381c] rounded-md p-3 text-xs text-[#fbbf24] flex items-center gap-2">
+              <span className="text-base">⚠️</span>
+              <span>
+                Review decisions and compliance certificate issuance are restricted to <strong>Brand Managers</strong>.
+                Your current client assignment is <strong>{currentClientRole}</strong>.
+              </span>
+            </div>
+          )}
 
           {/* Separation of Duties (ADR-004) Card */}
           <div className="bg-[#17151e] border border-[#2f273d] text-[#e2dcee] text-xs p-3.5 rounded-md space-y-1">

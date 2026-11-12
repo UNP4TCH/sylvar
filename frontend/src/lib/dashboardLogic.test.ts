@@ -43,6 +43,11 @@ test("upload allowed only with workspace and client", () => {
   expect(getUploadBlockReason(base)).toBeNull();
 });
 
+test("upload blocked for non-brand-manager", () => {
+  const blocked = getUploadBlockReason({ ...base, isBrandManager: false });
+  expect(blocked).toContain("restricted to Brand Managers");
+});
+
 test("no workspace: says so, and surfaces the real load error when the list failed", () => {
   expect(getUploadBlockReason({ ...base, selectedWs: "", selectedClient: "", workspacesStatus: "loaded" })).toContain("no workspace is selected");
   const failed = getUploadBlockReason({
@@ -66,6 +71,11 @@ test("activation is blocked when the current memory version is unknown, and the 
   const r = getActivationBlockReason({ memoryStatus: "error", memoryError: "Could not read ... (HTTP 500)", summary: sum });
   expect(r).toContain("blocked");
   expect(r).toContain("HTTP 500");
+});
+
+test("activation blocked for non-brand-manager", () => {
+  const r = getActivationBlockReason({ memoryStatus: "loaded", memoryError: null, summary: sum, isBrandManager: false });
+  expect(r).toContain("restricted to Brand Managers");
 });
 
 test("activation blocked while loading, with no client, or with nothing to activate; allowed otherwise", () => {
